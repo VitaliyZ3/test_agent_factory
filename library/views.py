@@ -83,7 +83,7 @@ def return_book(request, pk):
 
 @login_required
 def my_loans(request):
-    loans = Loan.objects.filter(user=request.user).select_related('book', 'book__author')
+    loans = Loan.objects.select_related('book', 'book__author', 'user').order_by('due_date')
     return render(request, 'library/my_loans.html', {
         'active_loans': [loan for loan in loans if loan.returned_at is None],
         'past_loans': [loan for loan in loans if loan.returned_at is not None],
