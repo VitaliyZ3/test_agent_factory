@@ -8,7 +8,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Explicit bash enables pipefail, so `| tee` doesn't hide a failing exit code.
+        shell: bash
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.12', '3.13']
     steps:
@@ -23,7 +28,102 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Check for missing migrations
-        run: python manage.py makemigrations --check --dry-run
+        run: python manage.py makemigrations --check --dry-run 2>&1 | tee -a test-output.txt
 
       - name: Run tests
-        run: python manage.py test -v 2
+        run: python manage.py test -v 2 2>&1 | tee -a test-output.txt
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: test-output.txt
+          if-no-files-found: ignore
+
+  analyze:
+    needs: test
+    # Secrets are not available to PRs from forks, so only run for branches of this repo.
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.test.result == 'failure'
+        with:
+          fetch-depth: 0
+
+      - name: Download test output
+        if: needs.test.result == 'failure'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: test-results-*
+          path: test-results
+
+      - name: Prepare PR diff
+        if: needs.test.result == 'failure'
+        run: git diff ${{ github.event.pull_request.base.sha }} HEAD > pr.diff
+
+      - name: Install Claude Code
+        if: needs.test.result == 'failure'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Analyze failures with Claude
+        if: needs.test.result == 'failure'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude -p \
+            --allowedTools "Read,Grep,Glob" \
+            --max-turns 20 \
+            "The CI tests for this Django project failed on a pull request.
+          Test logs (one file per Python version) are in ./test-results/*/test-output.txt.
+          The pull request diff is in ./pr.diff. The project source is in the current directory.
+
+          Read the logs, find every failing or erroring test, and inspect the relevant code
+          and diff to determine the root cause. Failures repeated across Python versions are
+          the same failure: report them once and note which versions are affected.
+          If the logs are missing or contain no test run, say what step failed instead.
+
+          Reply in Ukrainian, as GitHub-flavored Markdown, with only the comment body
+          (no preamble). For each failure give: the test name, a short excerpt of the error,
+          the likely cause with file:line references, and a concrete suggested fix.
+          Keep it concise." > analysis.md
+          cat analysis.md
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- claude-test-analysis -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            let body;
+            if (process.env.TEST_RESULT === 'failure') {
+              const analysis = fs.readFileSync('analysis.md', 'utf8').trim();
+              body = `${marker}\n## ❌ Аналіз падіння тестів\n\n${analysis}\n\n---\n[Лог запуску](${process.env.RUN_URL}) · _аналіз згенеровано Claude_`;
+            } else if (existing) {
+              body = `${marker}\n## ✅ Усі тести пройшли\n\n[Лог запуску](${process.env.RUN_URL})`;
+            } else {
+              return; // nothing failed and nothing to update
+            }
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
