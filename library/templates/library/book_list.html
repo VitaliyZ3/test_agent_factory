@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Каталог книг</h1>
+<form method="get">
+  <input type="search" name="q" value="{{ query }}" placeholder="Назва, автор або ISBN">
+  <select name="genre">
+    <option value="">Усі жанри</option>
+    {% for genre in genres %}
+      <option value="{{ genre.pk }}"{% if selected_genre == genre.pk|stringformat:"s" %} selected{% endif %}>{{ genre }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Шукати</button>
+</form>
+{% for book in book_list %}
+  <div class="book">
+    <a href="{{ book.get_absolute_url }}"><strong>{{ book.title }}</strong></a>
+    — {{ book.author }}{% if book.published_year %} ({{ book.published_year }}){% endif %}
+    <div class="muted">{{ book.genres.all|join:", " }} · вільно {{ book.available_copies }} з {{ book.total_copies }}</div>
+  </div>
+{% empty %}
+  <p>Книг не знайдено.</p>
+{% endfor %}
+{% if is_paginated %}
+  <p>
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&genre={{ selected_genre }}">← Назад</a>{% endif %}
+    Сторінка {{ page_obj.number }} з {{ page_obj.paginator.num_pages }}
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&genre={{ selected_genre }}">Далі →</a>{% endif %}
+  </p>
+{% endif %}
+{% endblock %}

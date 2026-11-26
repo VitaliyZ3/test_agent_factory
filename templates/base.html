@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Бібліотека{% endblock %}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 0 16px; color: #222; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding: 12px 0; }
+    header a { margin-left: 12px; }
+    .messages li { list-style: none; padding: 8px 12px; margin: 8px 0; border-radius: 4px; }
+    .success { background: #e6f4ea; } .error { background: #fdecea; }
+    .book { padding: 12px 0; border-bottom: 1px solid #eee; }
+    .muted { color: #777; } .overdue { color: #b00020; font-weight: bold; }
+    form.inline { display: inline; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="{% url 'library:book_list' %}"><strong>📚 Бібліотека</strong></a>
+    <nav>
+      {% if user.is_authenticated %}
+        <span>{{ user.username }}</span>
+        <a href="{% url 'library:my_loans' %}">Мої книги</a>
+        <form class="inline" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Вийти</button></form>
+      {% else %}
+        <a href="{% url 'login' %}">Увійти</a>
+      {% endif %}
+    </nav>
+  </header>
+  {% if messages %}
+    <ul class="messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+  {% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>
