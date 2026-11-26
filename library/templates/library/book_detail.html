@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }}{% endblock %}
+{% block content %}
+<h1>{{ book.title }}</h1>
+<p>Автор: {{ book.author }}</p>
+{% if book.published_year %}<p>Рік видання: {{ book.published_year }}</p>{% endif %}
+<p>ISBN: {{ book.isbn }}</p>
+{% if book.genres.exists %}<p>Жанри: {{ book.genres.all|join:", " }}</p>{% endif %}
+{% if book.description %}<p>{{ book.description|linebreaksbr }}</p>{% endif %}
+<p>Вільних примірників: {{ book.available_copies }} з {{ book.total_copies }}</p>
+
+{% if user.is_authenticated %}
+  {% if user_loan %}
+    <p>Ви взяли цю книгу. Поверніть до {{ user_loan.due_date|date:"d.m.Y" }}.</p>
+    <form method="post" action="{% url 'library:return_book' user_loan.pk %}">{% csrf_token %}<button type="submit">Повернути</button></form>
+  {% elif book.is_available %}
+    <form method="post" action="{% url 'library:borrow_book' book.pk %}">{% csrf_token %}<button type="submit">Взяти книгу</button></form>
+  {% else %}
+    <p class="muted">Усі примірники зараз на руках.</p>
+  {% endif %}
+{% else %}
+  <p><a href="{% url 'login' %}?next={{ request.path }}">Увійдіть</a>, щоб взяти книгу.</p>
+{% endif %}
+{% endblock %}

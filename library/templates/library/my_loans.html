@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Мої книги{% endblock %}
+{% block content %}
+<h1>Мої книги</h1>
+<h2>На руках</h2>
+{% for loan in active_loans %}
+  <div class="book">
+    <a href="{{ loan.book.get_absolute_url }}">{{ loan.book.title }}</a> — {{ loan.book.author }}
+    <div class="{% if loan.is_overdue %}overdue{% else %}muted{% endif %}">
+      Повернути до {{ loan.due_date|date:"d.m.Y" }}{% if loan.is_overdue %} (прострочено){% endif %}
+    </div>
+    <form method="post" action="{% url 'library:return_book' loan.pk %}">{% csrf_token %}<button type="submit">Повернути</button></form>
+  </div>
+{% empty %}
+  <p>У вас немає взятих книг.</p>
+{% endfor %}
+<h2>Історія</h2>
+{% for loan in past_loans %}
+  <div class="book">{{ loan.book.title }} <span class="muted">— повернено {{ loan.returned_at|date:"d.m.Y" }}</span></div>
+{% empty %}
+  <p class="muted">Поки порожньо.</p>
+{% endfor %}
+{% endblock %}
